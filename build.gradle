@@ -1,0 +1,23 @@
+group 'cyberspace.modulator'
+version '1.0-SNAPSHOT'
+
+apply plugin: 'java'
+
+sourceCompatibility = 1.8
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compile group: 'com.twitter', name: 'hbc-twitter4j', version: '2.2.0'
+    compile group: 'org.processing', name: 'core', version: '3.2.3'
+    compile group: 'org.processing', name: 'serial', version: '3.2.3'
+    compile group: 'org.scream3r', name: 'jssc', version: '2.8.0'
+
+    compile group: 'com.fasterxml.jackson.core', name: 'jackson-core', version: '2.8.6'
+    compile group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: '2.8.6'
+    compile group: 'com.fasterxml.jackson.core', name: 'jackson-annotations', version: '2.8.6'
+
+    testCompile group: 'junit', name: 'junit', version: '4.+'
+}
