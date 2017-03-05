@@ -13,6 +13,8 @@ import cyberspace.modulator.config.CyberSpaceModulatorConfig;
 import cyberspace.modulator.config.ExtractedData;
 import cyberspace.modulator.config.TwitterConfig;
 import interfascia.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import processing.core.PApplet;
 import processing.serial.Serial;
 import twitter4j.GeoLocation;
@@ -29,7 +31,11 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 public class CyberSpaceModulatorApplet extends PApplet {
 
-    /** Used for input GUI */
+    private static Logger LOGGER = LoggerFactory.getLogger(CyberSpaceModulatorApplet.class);
+
+    /**
+     * Used for input GUI
+     */
     private GUIController guiController;
     private IFTextField textField;
     private IFLabel label;
@@ -49,7 +55,7 @@ public class CyberSpaceModulatorApplet extends PApplet {
      * e.g. "#Syria", "#trump"
      * Leave empty to not filter for specific terms
      */
-   // private static final List TRACK_TERMS = Arrays.asList("trump");
+    // private static final List TRACK_TERMS = Arrays.asList("trump");
 
     /**
      * Add comma separated list of Twitter Account Ids, that should be followed
@@ -110,21 +116,19 @@ public class CyberSpaceModulatorApplet extends PApplet {
         b2.addActionListener(this);
 
         // List all the available serial ports:
-        printArray(Serial.list());
+        LOGGER.info(Serial.list().toString());
 
         // Open the port you are using at the rate you want:
-        // myPort = new Serial(this, Serial.list()[0], 9600);      // USB-Port als Serial benutzen [x] Zahl ändern
+        myPort = new Serial(this, Serial.list()[0], 9600);      // USB-Port als Serial benutzen [x] Zahl ändern
 
         final ObjectMapper mapper = new ObjectMapper();
         final CyberSpaceModulatorConfig config;
         try {
             config = mapper.readValue(Paths.get(configPath).toFile(), CyberSpaceModulatorConfig.class);
         } catch (IOException e) {
-            // TODO: Replace all outputs with logger calls
-            e.printStackTrace();
+            LOGGER.error("Unable to read configuration", e);
             return;
         }
-
 
         final HttpHosts twitterStreamHost = new HttpHosts(Constants.STREAM_HOST);
         final StatusesFilterEndpoint twitterEndpoint = new StatusesFilterEndpoint();
@@ -142,10 +146,10 @@ public class CyberSpaceModulatorApplet extends PApplet {
         final Authentication oauth = new OAuth1(twitterConfig.getConsumerKey(), twitterConfig.getConsumerSecret(), twitterConfig.getToken(), twitterConfig.getTokenSecret());
 
         final ClientBuilder builder = new ClientBuilder()
-            .hosts(twitterStreamHost)
-            .authentication(oauth)
-            .endpoint(twitterEndpoint)
-            .processor(new StringDelimitedProcessor(msgQueue));
+                .hosts(twitterStreamHost)
+                .authentication(oauth)
+                .endpoint(twitterEndpoint)
+                .processor(new StringDelimitedProcessor(msgQueue));
 
         client = builder.build();
         client.connect();
@@ -163,17 +167,18 @@ public class CyberSpaceModulatorApplet extends PApplet {
             msg = msgQueue.take();
             final Status status = TwitterObjectFactory.createStatus(msg);
             switch (EXTRACTED_DATA) {
-            case GEOLOCATION:
-                sendGeoLocation(status);
-                break;
-            case TWEET_STATISTICS:
-                sendRetweetCount(status);
-                break;
-            default:
-                System.out.println("You entered the wrong project type!");
+                case GEOLOCATION:
+                    sendGeoLocation(status);
+                    break;
+                case TWEET_STATISTICS:
+                    sendRetweetCount(status);
+                    break;
+                default:
+                    LOGGER.error("Project type " + status + " is not supported.");
             }
 
         } catch (final Exception ex) {
+            LOGGER.error("An unexpected error occured", ex);
         }
     }
 
@@ -183,22 +188,24 @@ public class CyberSpaceModulatorApplet extends PApplet {
         final Place place = status.getPlace();
         if (place != null) {
             final GeoLocation[][] coordinates = place.getBoundingBoxCoordinates();
-            System.out.println("Message: " + status.getText());
-            System.out.println("Country: " + place.getCountry());
-            System.out.println("Coordinates: " + coordinates[0][0]);
+            LOGGER.debug("Message: " + status.getText());
+            LOGGER.debug("Country: " + place.getCountry());
+            LOGGER.debug("Coordinates: " + coordinates[0][0]);
 
             // TODO: Comments should be English
-            final double lati = coordinates[0][0].getLatitude() + 90;       // latitude von 0 bis 180
-            final double longi = coordinates[0][0].getLongitude() + 180;    // longitude von 0 bis 360
+            final double lati = coordinates[0][0].getLatitude() + 90;       // latitude from 0 to 180
+            final double longi = coordinates[0][0].getLongitude() + 180;    // longitude from 0 to 360
 
-            final int rndLati = round((float) lati);                       // Runden auf volle Zahl
-            final int rndLongi = round((float) longi);                     // Runden auf volle Zahl
+            final int rndLati = round((float) lati);
+            final int rndLongi = round((float) longi);
 
-            final String coordinatesStr = ("lat" + rndLati + "long" + rndLongi + "\n");      // String basteln
-            println(coordinatesStr);                                                   // String in Konsole anzeigen
-
-            myPort.write(coordinatesStr);                  // String an Serial schicken
-            delay(100);                                    // 100ms pause
+            // create string that is sent to Arduino
+            final String coordinatesStr = ("lat" + rndLati + "long" + rndLongi + "\n");
+            LOGGER.debug(coordinatesStr);
+            // Send string to serial schicken
+            myPort.write(coordinatesStr);
+            // wait for 100ms
+            delay(100);
         }
     }
 
@@ -215,17 +222,18 @@ public class CyberSpaceModulatorApplet extends PApplet {
         this.impressions += status.getUser().getFollowersCount();
         if ((curTime - lastSendTimestamp) > INTERVAL_IN_MS) {
 
-            System.out.println("UNIQUE: " + uniqueTweets);
-            System.out.println("RETWEETS: " + retweets);
-            System.out.println("IMPRESSIONS: " + impressions);
+            LOGGER.debug("UNIQUE: " + uniqueTweets);
+            LOGGER.debug("RETWEETS: " + retweets);
+            LOGGER.debug("IMPRESSIONS: " + impressions);
 
             // send data to Arduino
-
             final String tweetStatistics = ("uniquetweets" + uniqueTweets + "retweets" + retweets + "impressions" + impressions + "\n");      // String basteln
-            println(tweetStatistics);                                                   // String in Konsole anzeigen
+            LOGGER.debug(tweetStatistics);
 
-            //myPort.write(tweetStatistics);                  // String an Serial schicken
-            // delay(100);                                    // 100ms pause
+            // send data to Arduino
+            myPort.write(tweetStatistics);
+            // wait for 100ms
+            delay(100);
 
             uniqueTweets = 0;
             retweets = 0;
@@ -236,24 +244,24 @@ public class CyberSpaceModulatorApplet extends PApplet {
     }
 
     void actionPerformed(final GUIEvent e) {
-        // println ("Component: " + e.getSource()); //.getLabel());
-        // println ("Message: " + e.getMessage());
+        LOGGER.debug("Component: " + e.getSource()); //.getLabel());
+        LOGGER.debug("Message: " + e.getMessage());
 
         if (e.getMessage().equals("Completed")) {
             label.setLabel(textField.getValue());
             tweetvar = textField.getValue();
-            println("tweetvar: " + tweetvar);
+            LOGGER.debug("tweetvar: " + tweetvar);
         }
 
         if (e.getSource() == b1) {
             label.setLabel(textField.getValue());
             tweetvar = textField.getValue();
-            println("tweetvar: " + tweetvar);
+            LOGGER.debug("tweetvar: " + tweetvar);
         } else if (e.getSource() == b2) {
             textField.setValue("");
             label.setLabel("");
             tweetvar = "";
-            println("tweetvar: " + tweetvar);
+            LOGGER.debug("tweetvar: " + tweetvar);
         }
     }
 }
