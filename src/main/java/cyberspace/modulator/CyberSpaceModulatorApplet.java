@@ -1,34 +1,29 @@
 package cyberspace.modulator;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.twitter.hbc.ClientBuilder;
-import com.twitter.hbc.core.Client;
-import com.twitter.hbc.core.Constants;
-import com.twitter.hbc.core.HttpHosts;
-import com.twitter.hbc.core.endpoint.StatusesFilterEndpoint;
-import com.twitter.hbc.core.processor.StringDelimitedProcessor;
-import com.twitter.hbc.httpclient.auth.Authentication;
-import com.twitter.hbc.httpclient.auth.OAuth1;
 import cyberspace.modulator.config.CyberSpaceModulatorConfig;
 import cyberspace.modulator.config.ExtractedData;
-import cyberspace.modulator.config.TwitterConfig;
+import cyberspace.modulator.twitter.TwitterController;
 import interfascia.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import processing.core.PApplet;
 import processing.serial.Serial;
-import twitter4j.GeoLocation;
-import twitter4j.Place;
 import twitter4j.Status;
-import twitter4j.TwitterObjectFactory;
 
 import java.io.IOException;
 import java.nio.file.Paths;
-import java.util.List;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
 
 public class CyberSpaceModulatorApplet extends PApplet {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(CyberSpaceModulatorApplet.class);
+
+    private static final String configPath = "resources/config.json";
+
+    /**
+     * Change this depending on your project
+     */
+    private final ExtractedData extractedData = null;
 
     /**
      * Used for input GUI
@@ -41,26 +36,15 @@ public class CyberSpaceModulatorApplet extends PApplet {
     private IFButton b2;
 
     /**
-     * Change this depending on your project
-     */
-    private static final ExtractedData EXTRACTED_DATA = ExtractedData.TWEET_STATISTICS;
-    private static final Long INTERVAL_IN_MS = 10000L;
-    private static final Logger LOGGER = LoggerFactory.getLogger(CyberSpaceModulatorApplet.class);
-    private final BlockingQueue<String> msgQueue = new LinkedBlockingQueue<>(100000);
-    private final String configPath = "resources/config.json";
-
-
-    /**
      * DON'T TOUCH ME
      */
-    private Client client;
     private Serial myPort;
-    private int retweets = 0;
-    private int uniqueTweets = 0;
-    private int impressions = 0;
-    private long lastSendTimestamp = System.currentTimeMillis();
-    private String tweetvar = "";
+
     private CyberSpaceModulatorConfig config = null;
+
+    private String tweetvar = "";
+
+    private TwitterController twitterController;
 
     @Override
     public void settings() {
@@ -76,6 +60,8 @@ public class CyberSpaceModulatorApplet extends PApplet {
             LOGGER.error("Unable to read configuration", e);
             return;
         }
+
+        this.twitterController = new TwitterController(this.config);
 
         // only create GUI if we actually want to use it
         if (this.config.getSetUpGui()) {
@@ -110,80 +96,36 @@ public class CyberSpaceModulatorApplet extends PApplet {
             this.myPort = new Serial(this, Serial.list()[0], 9600);
         }
 
-        final HttpHosts twitterStreamHost = new HttpHosts(Constants.STREAM_HOST);
-        final StatusesFilterEndpoint twitterEndpoint = new StatusesFilterEndpoint();
-        final List<String> trackTerms = this.config.getTrackTerms();
-        if (trackTerms != null && trackTerms.size() > 0) {
-            twitterEndpoint.trackTerms(trackTerms);
-        }
-
-        final List<Long> followIds = this.config.getFollowIds();
-        if (followIds != null && followIds.size() > 0) {
-            twitterEndpoint.followings(followIds);
-        }
-
-        final TwitterConfig twitterConfig = this.config.getTwitterConfig();
-        final Authentication oauth = new OAuth1(twitterConfig.getConsumerKey(), twitterConfig.getConsumerSecret(), twitterConfig.getToken(), twitterConfig.getTokenSecret());
-
-        final ClientBuilder builder = new ClientBuilder()
-                .hosts(twitterStreamHost)
-                .authentication(oauth)
-                .endpoint(twitterEndpoint)
-                .processor(new StringDelimitedProcessor(this.msgQueue));
-
-        this.client = builder.build();
-        this.client.connect();
-
     }
 
     @Override
     public void draw() {
         background(200);
-        String msg = null;
         try {
-            msg = this.msgQueue.take();
-            final Status status = TwitterObjectFactory.createStatus(msg);
-            switch (EXTRACTED_DATA) {
+            final Status status = this.twitterController.getStatus();
+            String result = null;
+            switch (this.extractedData) {
                 case GEOLOCATION:
-                    sendGeoLocation(status);
+                    result = this.twitterController.computeGeoLocation(status);
                     break;
                 case TWEET_STATISTICS:
-                    sendRetweetCount(status);
+                    result = this.twitterController.computeRetweetCount(status);
                     break;
                 default:
                     LOGGER.error("Project type " + status + " is not supported.");
             }
+            if (result != null) {
+                LOGGER.debug(result);
+            }
 
+            if (this.config.getSendToArduino() && result != null) {
+                sendToArduino(result);
+            }
         } catch (final Exception ex) {
             LOGGER.error("An unexpected error occured", ex);
         }
     }
 
-    private void sendGeoLocation(final Status status) {
-        final Place place = status.getPlace();
-        if (place != null) {
-            final GeoLocation[][] coordinates = place.getBoundingBoxCoordinates();
-            LOGGER.debug("Message: " + status.getText());
-            LOGGER.debug("Country: " + place.getCountry());
-            LOGGER.debug("Coordinates: " + coordinates[0][0]);
-
-            // latitude from 0 to 180
-            final double lati = coordinates[0][0].getLatitude() + 90;
-            // longitude from 0 to 360
-            final double longi = coordinates[0][0].getLongitude() + 180;
-
-            final int rndLati = round((float) lati);
-            final int rndLongi = round((float) longi);
-
-            // create string that is sent to Arduino
-            final String coordinatesStr = ("lat" + rndLati + "long" + rndLongi + "\n");
-            LOGGER.debug(coordinatesStr);
-
-            if (this.config.getSendToArduino()) {
-                sendToArduino(coordinatesStr);
-            }
-        }
-    }
 
     private void sendToArduino(final String coordinatesStr) {
         // Send string to serial
@@ -192,37 +134,6 @@ public class CyberSpaceModulatorApplet extends PApplet {
         delay(100);
     }
 
-
-    private void sendRetweetCount(final Status status) {
-
-        final long curTime = System.currentTimeMillis();
-
-        if (!status.isRetweet()) {
-            this.uniqueTweets++;
-        } else {
-            this.retweets++;
-        }
-
-        this.impressions += status.getUser().getFollowersCount();
-        if ((curTime - this.lastSendTimestamp) > INTERVAL_IN_MS) {
-
-            LOGGER.debug("UNIQUE: " + this.uniqueTweets);
-            LOGGER.debug("RETWEETS: " + this.retweets);
-            LOGGER.debug("IMPRESSIONS: " + this.impressions);
-
-            final String tweetStatistics = ("uniquetweets" + this.uniqueTweets + "retweets" + this.retweets + "impressions" + this.impressions + "\n");      // String basteln
-            LOGGER.debug(tweetStatistics);
-
-            // send data to Arduino
-            sendToArduino(tweetStatistics);
-
-            this.uniqueTweets = 0;
-            this.retweets = 0;
-            this.impressions = 0;
-
-            this.lastSendTimestamp = curTime;
-        }
-    }
 
     void actionPerformed(final GUIEvent e) {
         LOGGER.debug("Component: " + e.getSource()); //.getLabel());

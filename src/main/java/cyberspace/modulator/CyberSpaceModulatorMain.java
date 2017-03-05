@@ -4,7 +4,7 @@ package cyberspace.modulator;
 import processing.core.PApplet;
 
 public class CyberSpaceModulatorMain {
-    public static void main(String...args){
-        PApplet.main( "cyberspace.modulator.CyberSpaceModulatorApplet");
+    public static void main(final String... args) {
+        PApplet.main("CyberSpaceModulatorApplet");
     }
 }

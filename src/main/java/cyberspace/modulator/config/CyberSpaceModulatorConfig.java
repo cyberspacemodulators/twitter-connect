@@ -1,21 +1,24 @@
 package cyberspace.modulator.config;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.sun.istack.internal.NotNull;
 
 import java.util.List;
 
 public class CyberSpaceModulatorConfig {
 
-    @JsonProperty("sendToArduino")
+    @JsonProperty(value = "sendToArduino", defaultValue = "false")
     private Boolean sendToArduino;
 
-    @JsonProperty("setUpGui")
+    @JsonProperty(value = "setUpGui", defaultValue = "false")
     private Boolean setUpGui;
 
     @JsonProperty("extractedData")
+    @NotNull
     private ExtractedData extractedData;
 
     @JsonProperty("twitter")
+    @NotNull
     private TwitterConfig twitterConfig;
 
     @JsonProperty("trackTerms")
@@ -32,26 +35,26 @@ public class CyberSpaceModulatorConfig {
     }
 
     public TwitterConfig getTwitterConfig() {
-        return twitterConfig;
+        return this.twitterConfig;
     }
 
     public List<String> getTrackTerms() {
-        return trackTerms;
+        return this.trackTerms;
     }
 
     public List<Long> getFollowIds() {
-        return followIds;
+        return this.followIds;
     }
 
     public Boolean getSendToArduino() {
-        return sendToArduino;
+        return this.sendToArduino;
     }
 
     public ExtractedData getExtractedData() {
-        return extractedData;
+        return this.extractedData;
     }
 
     public Boolean getSetUpGui() {
-        return setUpGui;
+        return this.setUpGui;
     }
 }
