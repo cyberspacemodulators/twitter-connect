@@ -87,6 +87,8 @@ public class CyberSpaceModulatorApplet extends PApplet {
 
     private String configPath = "resources/config.json";
 
+    private CyberSpaceModulatorConfig config = null;
+
     @Override
     public void settings() {
         size(1000, 1000);
@@ -96,38 +98,45 @@ public class CyberSpaceModulatorApplet extends PApplet {
     @Override
     public void setup() {
 
-        guiController = new GUIController(this);
-        textField = new IFTextField("Text Field", 25, 30, 150);  // x, y, length
-        label = new IFLabel("Listen to: ", 25, 60);
-        label2 = new IFLabel(tweetvar, 80, 60);
-
-        b1 = new IFButton("Send", 200, 30, 40, 20);
-        b2 = new IFButton("Reset", 250, 30, 40, 20);
-
-        guiController.add(textField);
-        guiController.add(label);
-        guiController.add(label2);
-
-        guiController.add(b1);
-        guiController.add(b2);
-
-        guiController.addActionListener(this);
-        b1.addActionListener(this);
-        b2.addActionListener(this);
-
-        // List all the available serial ports:
-        LOGGER.info(Serial.list().toString());
-
-        // Open the port you are using at the rate you want:
-        myPort = new Serial(this, Serial.list()[0], 9600);      // USB-Port als Serial benutzen [x] Zahl ändern
-
         final ObjectMapper mapper = new ObjectMapper();
-        final CyberSpaceModulatorConfig config;
         try {
             config = mapper.readValue(Paths.get(configPath).toFile(), CyberSpaceModulatorConfig.class);
         } catch (IOException e) {
             LOGGER.error("Unable to read configuration", e);
             return;
+        }
+
+        // only create GUI if we actually want to use it
+        if (config.getSetUpGui()) {
+
+            guiController = new GUIController(this);
+            textField = new IFTextField("Text Field", 25, 30, 150);  // x, y, length
+            label = new IFLabel("Listen to: ", 25, 60);
+            label2 = new IFLabel(tweetvar, 80, 60);
+
+            b1 = new IFButton("Send", 200, 30, 40, 20);
+            b2 = new IFButton("Reset", 250, 30, 40, 20);
+
+            guiController.add(textField);
+            guiController.add(label);
+            guiController.add(label2);
+
+            guiController.add(b1);
+            guiController.add(b2);
+
+            guiController.addActionListener(this);
+            b1.addActionListener(this);
+            b2.addActionListener(this);
+        }
+
+
+        if (config.getSendToArduino()) {
+            // List all the available serial ports:
+            LOGGER.info(Serial.list().toString());
+
+            // Open the port you are using at the rate you want:
+            // Use USB-Port as Serial [x]
+            myPort = new Serial(this, Serial.list()[0], 9600);
         }
 
         final HttpHosts twitterStreamHost = new HttpHosts(Constants.STREAM_HOST);
@@ -192,9 +201,10 @@ public class CyberSpaceModulatorApplet extends PApplet {
             LOGGER.debug("Country: " + place.getCountry());
             LOGGER.debug("Coordinates: " + coordinates[0][0]);
 
-            // TODO: Comments should be English
-            final double lati = coordinates[0][0].getLatitude() + 90;       // latitude from 0 to 180
-            final double longi = coordinates[0][0].getLongitude() + 180;    // longitude from 0 to 360
+            // latitude from 0 to 180
+            final double lati = coordinates[0][0].getLatitude() + 90;
+            // longitude from 0 to 360
+            final double longi = coordinates[0][0].getLongitude() + 180;
 
             final int rndLati = round((float) lati);
             final int rndLongi = round((float) longi);
@@ -202,15 +212,21 @@ public class CyberSpaceModulatorApplet extends PApplet {
             // create string that is sent to Arduino
             final String coordinatesStr = ("lat" + rndLati + "long" + rndLongi + "\n");
             LOGGER.debug(coordinatesStr);
-            // Send string to serial schicken
-            myPort.write(coordinatesStr);
-            // wait for 100ms
-            delay(100);
+
+            if (config.getSendToArduino()) {
+                sendToArduino(coordinatesStr);
+            }
         }
     }
 
+    private void sendToArduino(String coordinatesStr) {
+        // Send string to serial
+        myPort.write(coordinatesStr);
+        // wait for 100ms
+        delay(100);
+    }
+
     private void sendRetweetCount(final Status status) {
-        // System.out.println(status.getText());
         final long curTime = System.currentTimeMillis();
 
         if (!status.isRetweet()) {
@@ -231,9 +247,7 @@ public class CyberSpaceModulatorApplet extends PApplet {
             LOGGER.debug(tweetStatistics);
 
             // send data to Arduino
-            myPort.write(tweetStatistics);
-            // wait for 100ms
-            delay(100);
+            sendToArduino(tweetStatistics);
 
             uniqueTweets = 0;
             retweets = 0;

@@ -6,6 +6,12 @@ import java.util.List;
 
 public class CyberSpaceModulatorConfig {
 
+    @JsonProperty("sendToArduino")
+    private Boolean sendToArduino;
+
+    @JsonProperty("setUpGui")
+    private Boolean setUpGui;
+
     @JsonProperty("extractedData")
     private ExtractedData extractedData;
 
@@ -35,5 +41,17 @@ public class CyberSpaceModulatorConfig {
 
     public List<Long> getFollowIds() {
         return followIds;
+    }
+
+    public Boolean getSendToArduino() {
+        return sendToArduino;
+    }
+
+    public ExtractedData getExtractedData() {
+        return extractedData;
+    }
+
+    public Boolean getSetUpGui() {
+        return setUpGui;
     }
 }
