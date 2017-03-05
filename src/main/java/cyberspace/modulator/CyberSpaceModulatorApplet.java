@@ -24,14 +24,11 @@ import twitter4j.TwitterObjectFactory;
 
 import java.io.IOException;
 import java.nio.file.Paths;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
 public class CyberSpaceModulatorApplet extends PApplet {
-
-    private static Logger LOGGER = LoggerFactory.getLogger(CyberSpaceModulatorApplet.class);
 
     /**
      * Used for input GUI
@@ -43,137 +40,108 @@ public class CyberSpaceModulatorApplet extends PApplet {
     private IFButton b1;
     private IFButton b2;
 
-
     /**
      * Change this depending on your project
      */
     private static final ExtractedData EXTRACTED_DATA = ExtractedData.TWEET_STATISTICS;
+    private static final Long INTERVAL_IN_MS = 10000L;
+    private static final Logger LOGGER = LoggerFactory.getLogger(CyberSpaceModulatorApplet.class);
+    private final BlockingQueue<String> msgQueue = new LinkedBlockingQueue<>(100000);
+    private final String configPath = "resources/config.json";
 
-
-    /**
-     * Add comma-separated list of terms, that should be searched for
-     * e.g. "#Syria", "#trump"
-     * Leave empty to not filter for specific terms
-     */
-    // private static final List TRACK_TERMS = Arrays.asList("trump");
-
-    /**
-     * Add comma separated list of Twitter Account Ids, that should be followed
-     * Transform Twitter handle into account id here: https://tweeterid.com
-     * Leave empty to not follow specific accounts
-     */
-    // private static final List FOLLOW_IDS = Arrays.asList();
 
     /**
      * DON'T TOUCH ME
      */
     private Client client;
-
     private Serial myPort;
-
-    private final BlockingQueue<String> msgQueue = new LinkedBlockingQueue<>(100000);
-
     private int retweets = 0;
-
     private int uniqueTweets = 0;
-
     private int impressions = 0;
-
-    private static final Long INTERVAL_IN_MS = 10000L;
-
     private long lastSendTimestamp = System.currentTimeMillis();
-
     private String tweetvar = "";
-
-    private String configPath = "resources/config.json";
-
     private CyberSpaceModulatorConfig config = null;
 
     @Override
     public void settings() {
         size(1000, 1000);
-
     }
 
     @Override
     public void setup() {
-
         final ObjectMapper mapper = new ObjectMapper();
         try {
-            config = mapper.readValue(Paths.get(configPath).toFile(), CyberSpaceModulatorConfig.class);
-        } catch (IOException e) {
+            this.config = mapper.readValue(Paths.get(this.configPath).toFile(), CyberSpaceModulatorConfig.class);
+        } catch (final IOException e) {
             LOGGER.error("Unable to read configuration", e);
             return;
         }
 
         // only create GUI if we actually want to use it
-        if (config.getSetUpGui()) {
+        if (this.config.getSetUpGui()) {
 
-            guiController = new GUIController(this);
-            textField = new IFTextField("Text Field", 25, 30, 150);  // x, y, length
-            label = new IFLabel("Listen to: ", 25, 60);
-            label2 = new IFLabel(tweetvar, 80, 60);
+            this.guiController = new GUIController(this);
+            this.textField = new IFTextField("Text Field", 25, 30, 150);  // x, y, length
+            this.label = new IFLabel("Listen to: ", 25, 60);
+            this.label2 = new IFLabel(this.tweetvar, 80, 60);
 
-            b1 = new IFButton("Send", 200, 30, 40, 20);
-            b2 = new IFButton("Reset", 250, 30, 40, 20);
+            this.b1 = new IFButton("Send", 200, 30, 40, 20);
+            this.b2 = new IFButton("Reset", 250, 30, 40, 20);
 
-            guiController.add(textField);
-            guiController.add(label);
-            guiController.add(label2);
+            this.guiController.add(this.textField);
+            this.guiController.add(this.label);
+            this.guiController.add(this.label2);
 
-            guiController.add(b1);
-            guiController.add(b2);
+            this.guiController.add(this.b1);
+            this.guiController.add(this.b2);
 
-            guiController.addActionListener(this);
-            b1.addActionListener(this);
-            b2.addActionListener(this);
+            this.guiController.addActionListener(this);
+            this.b1.addActionListener(this);
+            this.b2.addActionListener(this);
         }
 
 
-        if (config.getSendToArduino()) {
+        if (this.config.getSendToArduino()) {
             // List all the available serial ports:
             LOGGER.info(Serial.list().toString());
 
             // Open the port you are using at the rate you want:
             // Use USB-Port as Serial [x]
-            myPort = new Serial(this, Serial.list()[0], 9600);
+            this.myPort = new Serial(this, Serial.list()[0], 9600);
         }
 
         final HttpHosts twitterStreamHost = new HttpHosts(Constants.STREAM_HOST);
         final StatusesFilterEndpoint twitterEndpoint = new StatusesFilterEndpoint();
-        final List<String> trackTerms = config.getTrackTerms();
+        final List<String> trackTerms = this.config.getTrackTerms();
         if (trackTerms != null && trackTerms.size() > 0) {
             twitterEndpoint.trackTerms(trackTerms);
         }
 
-        final List<Long> followIds = config.getFollowIds();
+        final List<Long> followIds = this.config.getFollowIds();
         if (followIds != null && followIds.size() > 0) {
             twitterEndpoint.followings(followIds);
         }
 
-        final TwitterConfig twitterConfig = config.getTwitterConfig();
+        final TwitterConfig twitterConfig = this.config.getTwitterConfig();
         final Authentication oauth = new OAuth1(twitterConfig.getConsumerKey(), twitterConfig.getConsumerSecret(), twitterConfig.getToken(), twitterConfig.getTokenSecret());
 
         final ClientBuilder builder = new ClientBuilder()
                 .hosts(twitterStreamHost)
                 .authentication(oauth)
                 .endpoint(twitterEndpoint)
-                .processor(new StringDelimitedProcessor(msgQueue));
+                .processor(new StringDelimitedProcessor(this.msgQueue));
 
-        client = builder.build();
-        client.connect();
+        this.client = builder.build();
+        this.client.connect();
 
     }
 
     @Override
     public void draw() {
         background(200);
-
-        // TODO: make me work again
-        // while (!client.isDone()) {
         String msg = null;
         try {
-            msg = msgQueue.take();
+            msg = this.msgQueue.take();
             final Status status = TwitterObjectFactory.createStatus(msg);
             switch (EXTRACTED_DATA) {
                 case GEOLOCATION:
@@ -190,8 +158,6 @@ public class CyberSpaceModulatorApplet extends PApplet {
             LOGGER.error("An unexpected error occured", ex);
         }
     }
-
-    //}
 
     private void sendGeoLocation(final Status status) {
         final Place place = status.getPlace();
@@ -213,47 +179,48 @@ public class CyberSpaceModulatorApplet extends PApplet {
             final String coordinatesStr = ("lat" + rndLati + "long" + rndLongi + "\n");
             LOGGER.debug(coordinatesStr);
 
-            if (config.getSendToArduino()) {
+            if (this.config.getSendToArduino()) {
                 sendToArduino(coordinatesStr);
             }
         }
     }
 
-    private void sendToArduino(String coordinatesStr) {
+    private void sendToArduino(final String coordinatesStr) {
         // Send string to serial
-        myPort.write(coordinatesStr);
+        this.myPort.write(coordinatesStr);
         // wait for 100ms
         delay(100);
     }
 
+
     private void sendRetweetCount(final Status status) {
+
         final long curTime = System.currentTimeMillis();
 
         if (!status.isRetweet()) {
-            uniqueTweets++;
+            this.uniqueTweets++;
         } else {
-            retweets++;
+            this.retweets++;
         }
 
         this.impressions += status.getUser().getFollowersCount();
-        if ((curTime - lastSendTimestamp) > INTERVAL_IN_MS) {
+        if ((curTime - this.lastSendTimestamp) > INTERVAL_IN_MS) {
 
-            LOGGER.debug("UNIQUE: " + uniqueTweets);
-            LOGGER.debug("RETWEETS: " + retweets);
-            LOGGER.debug("IMPRESSIONS: " + impressions);
+            LOGGER.debug("UNIQUE: " + this.uniqueTweets);
+            LOGGER.debug("RETWEETS: " + this.retweets);
+            LOGGER.debug("IMPRESSIONS: " + this.impressions);
 
-            // send data to Arduino
-            final String tweetStatistics = ("uniquetweets" + uniqueTweets + "retweets" + retweets + "impressions" + impressions + "\n");      // String basteln
+            final String tweetStatistics = ("uniquetweets" + this.uniqueTweets + "retweets" + this.retweets + "impressions" + this.impressions + "\n");      // String basteln
             LOGGER.debug(tweetStatistics);
 
             // send data to Arduino
             sendToArduino(tweetStatistics);
 
-            uniqueTweets = 0;
-            retweets = 0;
-            impressions = 0;
+            this.uniqueTweets = 0;
+            this.retweets = 0;
+            this.impressions = 0;
 
-            lastSendTimestamp = curTime;
+            this.lastSendTimestamp = curTime;
         }
     }
 
@@ -262,20 +229,20 @@ public class CyberSpaceModulatorApplet extends PApplet {
         LOGGER.debug("Message: " + e.getMessage());
 
         if (e.getMessage().equals("Completed")) {
-            label.setLabel(textField.getValue());
-            tweetvar = textField.getValue();
-            LOGGER.debug("tweetvar: " + tweetvar);
+            this.label.setLabel(this.textField.getValue());
+            this.tweetvar = this.textField.getValue();
+            LOGGER.debug("tweetvar: " + this.tweetvar);
         }
 
-        if (e.getSource() == b1) {
-            label.setLabel(textField.getValue());
-            tweetvar = textField.getValue();
-            LOGGER.debug("tweetvar: " + tweetvar);
-        } else if (e.getSource() == b2) {
-            textField.setValue("");
-            label.setLabel("");
-            tweetvar = "";
-            LOGGER.debug("tweetvar: " + tweetvar);
+        if (e.getSource() == this.b1) {
+            this.label.setLabel(this.textField.getValue());
+            this.tweetvar = this.textField.getValue();
+            LOGGER.debug("tweetvar: " + this.tweetvar);
+        } else if (e.getSource() == this.b2) {
+            this.textField.setValue("");
+            this.label.setLabel("");
+            this.tweetvar = "";
+            LOGGER.debug("tweetvar: " + this.tweetvar);
         }
     }
 }

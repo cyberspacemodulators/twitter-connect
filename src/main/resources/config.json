@@ -1,12 +1,12 @@
 {
-"twitter": {
-  "consumerKey": "",
-  "consumerSecret": "",
-  "token": "",
-  "tokenSecret": ""
-},
+  "twitter": {
+    "consumerKey": "",
+    "consumerSecret": "",
+    "token": "",
+    "tokenSecret": ""
+  },
   "trackTerms": [],
   "followIds": [],
-  "sendToArduino":false,
-  "setUpGui":false
+  "sendToArduino": false,
+  "setUpGui": false
 }
