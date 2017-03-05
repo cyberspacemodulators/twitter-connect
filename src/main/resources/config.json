@@ -6,5 +6,7 @@
   "tokenSecret": ""
 },
   "trackTerms": [],
-  "followIds": []
+  "followIds": [],
+  "sendToArduino":false,
+  "setUpGui":false
 }
